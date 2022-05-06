@@ -1,7 +1,6 @@
 pub mod hdu;
 pub mod parsing;
 
-
 /// Return a number indicating how many bytes should be added as padding
 /// to adhere to the FITS specification for a given block of header/data unit.
 /// The FITS spec says that any header/data must be 2880 bytes long or a multiple
