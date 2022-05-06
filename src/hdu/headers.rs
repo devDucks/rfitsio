@@ -1,12 +1,43 @@
+//! Fast and easy queue abstraction.
+//!
+//! Provides an abstraction over a queue.  When the abstraction is used
+//! there are these advantages:
+//! - Fast
+//! - [`Easy`]
+//!
+//! [`Easy`]: http://thatwaseasy.example.com
+
+/// This module makes it easy.
+
 const PADDING: u8 = 32;
 const EQUAL_SIGN: u8 = 61;
 
+/// The representation of a FITS header, this is
+/// spec compliant.
 pub struct FITSHeader {
     pub key: [u8; 10],
     pub value: [u8; 70],
 }
 
 impl FITSHeader {
+    /// Use this method if you are looking for extra performance
+    /// or you are reading an existing FITS file.
+    /// DRAGONS AHEAD: This method usese memcpy so the incoming array
+    /// must be the same size of the one where it will be copied; if
+    /// this contract is not mantained the process will panic.
+    pub fn new_raw(key: &[u8], value: &[u8]) -> FITSHeader {
+        let mut header_key = [0; 10];
+        let mut header_value = [0; 70];
+
+        header_key.copy_from_slice(key);
+        header_value.copy_from_slice(value);
+
+        FITSHeader {
+            key: header_key,
+            value: header_value,
+        }
+    }
+
     pub fn new(key: &str, value: &str) -> FITSHeader {
         match key.len() {
             1..=8 => (),
@@ -61,7 +92,7 @@ impl FITSHeader {
 
 #[cfg(test)]
 mod tests {
-    use crate::headers::FITSHeader;
+    use crate::hdu::headers::FITSHeader;
 
     #[test]
     fn correct_key_format() {
@@ -115,5 +146,17 @@ mod tests {
         assert_eq!(full_header.contains("FOO"), true);
         assert_eq!(full_header.contains("BAR"), true);
         assert_eq!(full_header.contains("="), true);
+    }
+
+    #[test]
+    fn new_raw_built_correctly() {
+        let key = "COOL    = ";
+        let value = "          AWESOME VALUE  / COMMENT                                    ";
+        let header = FITSHeader::new_raw(key.as_bytes(), value.as_bytes());
+        let header_value = header.value_as_str();
+        let header_key = header.key_as_str();
+
+        assert_eq!(header_key, key);
+        assert_eq!(header_value, value);
     }
 }

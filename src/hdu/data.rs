@@ -24,7 +24,7 @@ impl FITSData {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::FITSData;
+    use crate::hdu::data::FITSData;
 
     // In this test we are simulating adding an image which is
     // 480_000 (800px*600px) bytes long. 480_000 is not a multiple
