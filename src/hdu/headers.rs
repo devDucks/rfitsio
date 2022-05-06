@@ -11,6 +11,7 @@
 
 const PADDING: u8 = 32;
 const EQUAL_SIGN: u8 = 61;
+const END_HEADER_KEY: [u8; 10] = [69, 78, 68, 32, 32, 32, 32, 32, 32, 32];
 
 /// The representation of a FITS header, this is
 /// spec compliant.
@@ -73,6 +74,19 @@ impl FITSHeader {
         FITSHeader {
             key: header_key,
             value: header_value,
+        }
+    }
+
+    /// With this method the HDU ending header will be constructed,
+    /// according to the FITS spec it started with END, doesn't
+    /// contain an = sign and is padded till the end of the 80 bytes
+    /// long hdu block.
+    pub fn end_hdu() -> FITSHeader {
+        let value = [PADDING; 70];
+
+        FITSHeader {
+            key: END_HEADER_KEY,
+            value: value,
         }
     }
 
@@ -158,5 +172,15 @@ mod tests {
 
         assert_eq!(header_key, key);
         assert_eq!(header_value, value);
+    }
+
+    #[test]
+    fn check_end_header_constructed_correctly() {
+        let header = FITSHeader::end_hdu();
+        let header_key = header.key_as_str();
+
+        assert_eq!(header_key.contains("END"), true);
+        assert_eq!(header_key.contains("="), false);
+        assert_eq!(header.value, [32; 70]);
     }
 }
