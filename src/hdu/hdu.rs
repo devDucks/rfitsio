@@ -7,7 +7,7 @@ pub struct HDU {
 }
 
 impl HDU {
-    fn init() -> HDU {
+    fn new() -> HDU {
         return HDU {
             headers: Vec::new(),
             data: FITSData::new(),

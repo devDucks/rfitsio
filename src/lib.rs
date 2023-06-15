@@ -1,3 +1,5 @@
+use hdu::data::FITSData;
+
 pub mod hdu;
 pub mod parsing;
 
@@ -14,6 +16,10 @@ pub fn fill_to_2880(n: i32) -> i32 {
         m => 2880 - m,
     };
     bytes_to_add
+}
+
+pub struct FITSImage {
+    hdus: Vec<hdu::HDU>,
 }
 
 #[cfg(test)]

@@ -26,7 +26,7 @@ impl FITSHeader {
     /// DRAGONS AHEAD: This method usese memcpy so the incoming array
     /// must be the same size of the one where it will be copied; if
     /// this contract is not mantained the process will panic.
-    pub fn new_raw(key: &[u8], value: &[u8]) -> FITSHeader {
+    pub fn from_slices(key: &[u8], value: &[u8]) -> FITSHeader {
         let mut header_key = [0; 10];
         let mut header_value = [0; 70];
 
