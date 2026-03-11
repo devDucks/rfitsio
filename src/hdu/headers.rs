@@ -67,7 +67,7 @@ impl FITSHeader {
             header_value[i] = *char;
         }
 
-        for i in key.len()..70 {
+        for i in value.len()..70 {
             header_value[i as usize] = PADDING;
         }
 
@@ -172,6 +172,23 @@ mod tests {
 
         assert_eq!(header_key, key);
         assert_eq!(header_value, value);
+    }
+
+    #[test]
+    fn value_not_truncated_when_longer_than_key() {
+        // key.len() == 2, value.len() == 3; the old bug used key.len() as the
+        // padding start index, which overwrote the last byte of the value with
+        // a space.
+        let header = FITSHeader::new("AB", "FOO");
+        let value_str = std::str::from_utf8(&header.value).unwrap();
+        assert!(
+            value_str.starts_with("FOO"),
+            "expected value to start with 'FOO', got: {:?}",
+            &value_str[..10]
+        );
+        assert_eq!(value_str.len(), 70);
+        // The remaining 67 bytes must all be spaces
+        assert_eq!(&value_str[3..], " ".repeat(67));
     }
 
     #[test]
