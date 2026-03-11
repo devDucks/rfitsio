@@ -1,4 +1,4 @@
-const PADDING: u8 = 32;
+const NULL_BYTE: u8 = 0;
 
 use crate::fill_to_2880;
 
@@ -15,7 +15,7 @@ impl FITSData {
         let bytes_to_add = fill_to_2880(data.len() as i32);
 
         for _ in 0..bytes_to_add {
-            data.push(PADDING);
+            data.push(NULL_BYTE);
         }
 
         self.data = data;
@@ -36,6 +36,7 @@ mod tests {
         let mut fits_data = FITSData::new();
         fits_data.add(image);
         assert_eq!(fits_data.data.len(), 480_960);
+        assert_eq!(fits_data.data[480_000], 0u8);
     }
 
     #[test]
