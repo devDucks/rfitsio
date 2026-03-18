@@ -264,11 +264,8 @@ mod tests {
 
     #[test]
     fn value_with_comment() {
-        let header = FITSHeader::new_with_comment(
-            "BITPIX",
-            FITSValue::Integer(16),
-            "bits per pixel",
-        );
+        let header =
+            FITSHeader::new_with_comment("BITPIX", FITSValue::Integer(16), "bits per pixel");
         assert!(
             header.value_as_str().contains("/ bits per pixel"),
             "got: {:?}",

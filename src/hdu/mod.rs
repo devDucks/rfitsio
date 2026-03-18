@@ -62,10 +62,7 @@ impl HDU {
             ));
         }
 
-        let has_bitpix = self
-            .headers
-            .iter()
-            .any(|h| &h.key[..6] == b"BITPIX");
+        let has_bitpix = self.headers.iter().any(|h| &h.key[..6] == b"BITPIX");
         if !has_bitpix {
             return Err("BITPIX keyword is required in the primary HDU".into());
         }
@@ -111,7 +108,7 @@ impl HDU {
 
 #[cfg(test)]
 mod tests {
-    use crate::hdu::{headers::FITSValue, HDU};
+    use crate::hdu::{HDU, headers::FITSValue};
 
     #[test]
     fn check_initialization() {
@@ -146,7 +143,11 @@ mod tests {
         hdu.add_header("NAXIS", FITSValue::Integer(0));
         hdu.headers.push(crate::hdu::headers::FITSHeader::end_hdu());
         let bytes = hdu.to_bytes();
-        assert_eq!(bytes.len() % 2880, 0, "serialized HDU must be a multiple of 2880 bytes");
+        assert_eq!(
+            bytes.len() % 2880,
+            0,
+            "serialized HDU must be a multiple of 2880 bytes"
+        );
     }
 
     #[test]

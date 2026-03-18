@@ -119,8 +119,8 @@ pub mod endian {
 
 #[cfg(test)]
 mod tests {
-    use crate::fill_to_2880;
     use crate::endian;
+    use crate::fill_to_2880;
 
     #[test]
     fn check_2880_bytes_hdu_not_add_any() {
