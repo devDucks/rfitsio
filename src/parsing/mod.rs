@@ -2,11 +2,11 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{BufReader, Seek, SeekFrom};
 
+use crate::FITSFile;
 use crate::fill_to_2880;
+use crate::hdu::HDU;
 use crate::hdu::data::FITSData;
 use crate::hdu::headers::FITSHeader;
-use crate::hdu::HDU;
-use crate::FITSFile;
 
 /// Parse a FITS file at `img_path` and return a `FITSFile` containing all HDUs.
 ///
@@ -43,9 +43,7 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
                 Err(_) => break,
             }
 
-            let keyword = std::str::from_utf8(&record[0..8])
-                .unwrap_or("")
-                .trim_end();
+            let keyword = std::str::from_utf8(&record[0..8]).unwrap_or("").trim_end();
 
             // Parse scalar keywords needed for data-unit sizing.
             // Values occupy bytes 11–30 of the record (positions 10–29).

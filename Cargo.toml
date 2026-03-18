@@ -1,13 +1,13 @@
 [package]
 name = "rfitsio"
-version = "0.2.0"
-edition = "2021"
+version = "0.3.0"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eframe = "0.29"
-rfd = "0.14"
+eframe = "0.33"
+rfd = "0.17"
 
 [lib]
 name = "rfitsio"
