@@ -1,0 +1,8 @@
+[package]
+name = "rfitsio"
+version = "0.3.0"
+edition = "2024"
+
+[lib]
+name = "rfitsio"
+path = "src/lib.rs"
