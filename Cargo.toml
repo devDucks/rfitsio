@@ -3,9 +3,9 @@ name = "rfitsio"
 version = "0.3.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/devDucks/astrotools/"
+repository = "https://github.com/devDucks/crabula"
 readme = "README.md"
-description = "Basic building block for the lightspeed protocol and lightspeed compliant drivers"
+description = "Rust native library to read/write FITS files"
 
 [lib]
 name = "rfitsio"
