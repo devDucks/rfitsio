@@ -1,3 +1,4 @@
+pub mod bintable;
 pub mod data;
 pub mod headers;
 
@@ -5,6 +6,7 @@ use crate::fill_to_2880;
 use crate::hdu::data::FITSData;
 use crate::hdu::headers::{FITSHeader, FITSValue};
 
+#[derive(Debug)]
 pub struct HDU {
     pub headers: Vec<FITSHeader>,
     pub data: FITSData,
@@ -92,7 +94,7 @@ impl HDU {
 
         for header in &self.headers {
             bytes.extend_from_slice(&header.key);
-            bytes.extend_from_slice(&header.value);
+            bytes.extend_from_slice(&header.value.val);
         }
 
         // Pad the header section to the next 2880-byte boundary with spaces.
