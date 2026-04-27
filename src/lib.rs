@@ -19,6 +19,7 @@ pub fn fill_to_2880(n: i32) -> i32 {
 ///
 /// The first HDU is the primary HDU and must begin with the `SIMPLE` keyword.
 /// Additional HDUs are extensions (IMAGE, BINTABLE, TABLE).
+#[derive(Debug)]
 pub struct FITSFile {
     pub hdus: Vec<HDU>,
 }

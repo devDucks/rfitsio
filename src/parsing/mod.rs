@@ -6,7 +6,31 @@ use crate::FITSFile;
 use crate::fill_to_2880;
 use crate::hdu::HDU;
 use crate::hdu::data::FITSData;
-use crate::hdu::headers::FITSHeader;
+use crate::hdu::headers::{FITSHeader, FITSValue};
+
+/// Infer a `FITSValue` from the raw 70-byte value field of a record.
+/// Used by `new_raw` calls in the parser where the type is not known ahead of time.
+fn infer_value(has_equals: bool, val_bytes: &[u8]) -> FITSValue {
+    if !has_equals {
+        let text = std::str::from_utf8(val_bytes)
+            .unwrap_or("")
+            .trim_end()
+            .to_string();
+        return FITSValue::Text(text);
+    }
+    let raw = std::str::from_utf8(val_bytes).unwrap_or("");
+    let val_str = raw.split('/').next().unwrap_or("").trim();
+    if val_str == "T" || val_str == "F" {
+        FITSValue::Logical(val_str == "T")
+    } else if val_str.starts_with('\'') {
+        let inner = val_str.trim_matches('\'').replace("''", "'");
+        FITSValue::Text(inner.trim_end().to_string())
+    } else if val_str.contains('.') || val_str.to_ascii_uppercase().contains('E') {
+        FITSValue::Float(val_str.parse().unwrap_or(0.0))
+    } else {
+        FITSValue::Integer(val_str.parse().unwrap_or(0))
+    }
+}
 
 /// Parse a FITS file at `img_path` and return a `FITSFile` containing all HDUs.
 ///
@@ -14,8 +38,8 @@ use crate::hdu::headers::FITSHeader;
 /// - Header records are read in 80-byte chunks until the `END` keyword is found.
 /// - After the last header record the reader is advanced to the next 2880-byte
 ///   boundary before the data unit begins.
-/// - The data unit size is computed from the parsed `BITPIX` and `NAXISn` values:
-///   `|BITPIX|/8 × NAXIS1 × NAXIS2 × … × NAXISn`.
+/// - The data unit size is computed as `GCOUNT × (PCOUNT + NAXIS1 × … × NAXISn) × |BITPIX|/8`,
+///   covering both image and binary-table (BINTABLE) extensions.
 /// - After the data unit the reader is again aligned to the next 2880-byte
 ///   boundary for the following HDU.
 /// - All HDUs in the file are read (not just the first one).
@@ -34,6 +58,8 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
         // Values needed to compute the data unit size.
         let mut bitpix: i32 = 0;
         let mut naxis: usize = 0;
+        let mut pcount: usize = 0;
+        let mut gcount: usize = 1;
         // naxisn[0] = NAXIS1, naxisn[1] = NAXIS2, …
         let mut naxisn: Vec<usize> = Vec::new();
 
@@ -60,6 +86,12 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
                         naxis = val_str.parse().unwrap_or(0);
                         naxisn = vec![0; naxis];
                     }
+                    "PCOUNT" => {
+                        pcount = val_str.parse().unwrap_or(0);
+                    }
+                    "GCOUNT" => {
+                        gcount = val_str.parse().unwrap_or(1);
+                    }
                     k if k.starts_with("NAXIS") => {
                         if let Ok(axis_idx) = k[5..].parse::<usize>() {
                             if axis_idx >= 1 && axis_idx <= naxis {
@@ -72,7 +104,8 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
             }
 
             let is_end = &record[0..3] == b"END";
-            headers.push(FITSHeader::new_raw(&record[0..10], &record[10..80]));
+            let kind = infer_value(record[8] == b'=', &record[10..80]);
+            headers.push(FITSHeader::new_raw(&record[0..10], &record[10..80], kind));
 
             if is_end {
                 break;
@@ -97,15 +130,16 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
 
         // ── Compute data unit size ─────────────────────────────────────────
         //
-        // data_size = |BITPIX|/8 × NAXIS1 × NAXIS2 × … × NAXISn
-        // If NAXIS = 0 there is no data unit.
+        // Per FITS standard:
+        // data_size = GCOUNT × (PCOUNT + NAXIS1 × … × NAXISn) × |BITPIX| / 8
+        // For images GCOUNT=1 and PCOUNT=0; for BINTABLE PCOUNT holds the heap size.
 
         let data_size: usize = if naxis == 0 || naxisn.is_empty() {
             0
         } else {
             let pixel_count: usize = naxisn.iter().product();
             let bytes_per_pixel = (bitpix.unsigned_abs() / 8) as usize;
-            pixel_count * bytes_per_pixel
+            gcount * (pcount + pixel_count * bytes_per_pixel)
         };
 
         // ── Read the data unit ─────────────────────────────────────────────

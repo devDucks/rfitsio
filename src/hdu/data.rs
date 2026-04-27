@@ -6,6 +6,14 @@ pub struct FITSData {
     pub data: Vec<u8>,
 }
 
+impl std::fmt::Debug for FITSData {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("FITSData")
+            .field("bytes", &self.data.len())
+            .finish()
+    }
+}
+
 impl FITSData {
     pub fn new() -> FITSData {
         FITSData { data: Vec::new() }

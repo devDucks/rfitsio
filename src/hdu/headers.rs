@@ -9,6 +9,7 @@ const END_HEADER_KEY: [u8; 10] = [69, 78, 68, 32, 32, 32, 32, 32, 32, 32];
 /// - `Integer`  → right-justified in columns 11–30.
 /// - `Float`    → scientific notation, right-justified in columns 11–30.
 /// - `Text`     → enclosed in single quotes, padded to a minimum of 8 chars.
+#[derive(Debug)]
 pub enum FITSValue {
     Logical(bool),
     Integer(i64),
@@ -16,12 +17,51 @@ pub enum FITSValue {
     Text(String),
 }
 
+/// The encoded value field of a FITS header record.
+///
+/// - `val`  : the 70-byte wire representation, ready to write to a file.
+/// - `kind` : the typed value; `None` only for the END terminator.
+pub struct FITSVal {
+    pub val: [u8; 70],
+    pub kind: Option<FITSValue>,
+}
+
+impl std::fmt::Debug for FITSVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let text = std::str::from_utf8(&self.val)
+            .unwrap_or("<non-utf8>")
+            .trim_end();
+        f.debug_struct("FITSVal")
+            .field("val", &text)
+            .field("kind", &self.kind)
+            .finish()
+    }
+}
+
 /// The representation of a FITS header record (80 bytes total):
 /// - `key`   : 10 bytes — 8-char keyword + `=` + space (or all spaces for COMMENT/HISTORY/END)
 /// - `value` : 70 bytes — encoded value and optional inline comment
 pub struct FITSHeader {
     pub key: [u8; 10],
-    pub value: [u8; 70],
+    pub value: FITSVal,
+}
+
+impl std::fmt::Debug for FITSHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let key = std::str::from_utf8(&self.key[..8])
+            .unwrap_or("<non-utf8>")
+            .trim_end();
+        f.debug_struct("FITSHeader").field("key", &key).finish()
+    }
+}
+
+impl std::fmt::Display for FITSHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let key = std::str::from_utf8(&self.key[..8])
+            .unwrap_or("NON-UTF8 HEADER KEY")
+            .trim_end();
+        write!(f, "KEY: {}", key)
+    }
 }
 
 /// Validate a FITS keyword:
@@ -61,12 +101,12 @@ fn validate_keyword(key: &str) {
 /// - Logical / Integer / Float: right-justified in the first 20 bytes (columns 11–30).
 /// - Text: `'<string>'` left-aligned, string padded to at least 8 chars inside quotes.
 /// - Optional comment: ` / <text>` appended after the value, space-padded to 70 bytes.
-fn encode_value(value: FITSValue, comment: Option<&str>) -> [u8; 70] {
-    let val_str = match value {
-        FITSValue::Logical(b) => format!("{:>20}", if b { "T" } else { "F" }),
+fn encode_value(value: FITSValue, comment: Option<&str>) -> FITSVal {
+    let val_str = match &value {
+        FITSValue::Logical(b) => format!("{:>20}", if *b { "T" } else { "F" }),
         FITSValue::Integer(n) => format!("{:>20}", n),
         FITSValue::Float(f) => format!("{:>20.10E}", f),
-        FITSValue::Text(ref s) => {
+        FITSValue::Text(s) => {
             assert!(
                 s.len() <= 68,
                 "FITS string value too long (max 68 chars), got {} chars",
@@ -89,20 +129,27 @@ fn encode_value(value: FITSValue, comment: Option<&str>) -> [u8; 70] {
     for (i, b) in full.as_bytes().iter().take(70).enumerate() {
         result[i] = *b;
     }
-    result
+    FITSVal {
+        val: result,
+        kind: Some(value),
+    }
 }
 
 impl FITSHeader {
     /// Fast path for reading existing FITS files. The incoming slices must be
     /// exactly 10 bytes (key field) and 70 bytes (value field) respectively.
-    pub fn new_raw(key: &[u8], value: &[u8]) -> FITSHeader {
+    /// The caller provides the typed `FITSValue` that corresponds to the raw bytes.
+    pub fn new_raw(key: &[u8], value: &[u8], kind: FITSValue) -> FITSHeader {
         let mut header_key = [0; 10];
         let mut header_value = [0; 70];
         header_key.copy_from_slice(key);
         header_value.copy_from_slice(value);
         FITSHeader {
             key: header_key,
-            value: header_value,
+            value: FITSVal {
+                val: header_value,
+                kind: Some(kind),
+            },
         }
     }
 
@@ -149,11 +196,17 @@ impl FITSHeader {
         }
         // Positions 8 and 9 remain spaces — no `=` for COMMENT records.
 
-        let mut value = [PADDING; 70];
+        let mut val = [PADDING; 70];
         for (i, b) in text.as_bytes().iter().take(70).enumerate() {
-            value[i] = *b;
+            val[i] = *b;
         }
-        FITSHeader { key, value }
+        FITSHeader {
+            key,
+            value: FITSVal {
+                val,
+                kind: Some(FITSValue::Text(text.to_string())),
+            },
+        }
     }
 
     /// Create a `HISTORY` record. Like COMMENT, no `=` indicator is used.
@@ -163,11 +216,17 @@ impl FITSHeader {
             key[i] = *b;
         }
 
-        let mut value = [PADDING; 70];
+        let mut val = [PADDING; 70];
         for (i, b) in text.as_bytes().iter().take(70).enumerate() {
-            value[i] = *b;
+            val[i] = *b;
         }
-        FITSHeader { key, value }
+        FITSHeader {
+            key,
+            value: FITSVal {
+                val,
+                kind: Some(FITSValue::Text(text.to_string())),
+            },
+        }
     }
 
     /// Create the mandatory `END` keyword that terminates a header section.
@@ -175,7 +234,10 @@ impl FITSHeader {
     pub fn end_hdu() -> FITSHeader {
         FITSHeader {
             key: END_HEADER_KEY,
-            value: [PADDING; 70],
+            value: FITSVal {
+                val: [PADDING; 70],
+                kind: None,
+            },
         }
     }
 
@@ -184,7 +246,7 @@ impl FITSHeader {
     }
 
     pub fn value_as_str(&self) -> &str {
-        std::str::from_utf8(&self.value).unwrap()
+        std::str::from_utf8(&self.value.val).unwrap()
     }
 
     pub fn as_str(&self) -> String {
@@ -276,7 +338,7 @@ mod tests {
     #[test]
     fn value_field_is_70_bytes() {
         let header = FITSHeader::new("NAXIS1", FITSValue::Integer(1024));
-        assert_eq!(header.value.len(), 70);
+        assert_eq!(header.value.val.len(), 70);
     }
 
     #[test]
@@ -312,7 +374,7 @@ mod tests {
         let header = FITSHeader::end_hdu();
         assert!(header.key_as_str().contains("END"));
         assert!(!header.key_as_str().contains('='));
-        assert_eq!(header.value, [32; 70]);
+        assert_eq!(header.value.val, [32; 70]);
     }
 
     // --- keyword validation ---
@@ -341,7 +403,11 @@ mod tests {
     fn new_raw_built_correctly() {
         let key = "COOL    = ";
         let value = "          AWESOME VALUE  / COMMENT                                    ";
-        let header = FITSHeader::new_raw(key.as_bytes(), value.as_bytes());
+        let header = FITSHeader::new_raw(
+            key.as_bytes(),
+            value.as_bytes(),
+            FITSValue::Text("AWESOME VALUE".into()),
+        );
         assert_eq!(header.key_as_str(), key);
         assert_eq!(header.value_as_str(), value);
     }
