@@ -103,7 +103,7 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
                 }
             }
 
-            let is_end = &record[0..3] == b"END";
+            let is_end = keyword == "END";
             let kind = infer_value(record[8] == b'=', &record[10..80]);
             headers.push(FITSHeader::new_raw(&record[0..10], &record[10..80], kind));
 
@@ -176,4 +176,135 @@ pub fn parse(img_path: &str) -> std::io::Result<FITSFile> {
     }
 
     Ok(fits_file)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+    use std::io::Write;
+
+    fn logical_record(keyword: &str, v: bool) -> [u8; 80] {
+        let mut rec = [b' '; 80];
+        for (i, &b) in keyword.as_bytes().iter().enumerate() {
+            rec[i] = b;
+        }
+        rec[8] = b'=';
+        let val = format!("{:>20}", if v { "T" } else { "F" });
+        rec[10..30].copy_from_slice(val.as_bytes());
+        rec
+    }
+
+    fn integer_record(keyword: &str, n: i64) -> [u8; 80] {
+        let mut rec = [b' '; 80];
+        for (i, &b) in keyword.as_bytes().iter().enumerate() {
+            rec[i] = b;
+        }
+        rec[8] = b'=';
+        let val = format!("{:>20}", n);
+        rec[10..30].copy_from_slice(val.as_bytes());
+        rec
+    }
+
+    fn text_record(keyword: &str, text: &str) -> [u8; 80] {
+        let mut rec = [b' '; 80];
+        for (i, &b) in keyword.as_bytes().iter().enumerate() {
+            rec[i] = b;
+        }
+        rec[8] = b'=';
+        let quoted = format!("'{:<8}'", text);
+        for (i, &b) in quoted.as_bytes().iter().enumerate() {
+            rec[10 + i] = b;
+        }
+        rec
+    }
+
+    fn end_record() -> [u8; 80] {
+        let mut rec = [b' '; 80];
+        rec[..3].copy_from_slice(b"END");
+        rec
+    }
+
+    /// Build a minimal FITS primary HDU (NAXIS=0, no data) with blank-keyword
+    /// records interspersed before and after a real keyword.
+    fn fits_bytes_with_blanks() -> Vec<u8> {
+        let records: Vec<[u8; 80]> = vec![
+            logical_record("SIMPLE", true),
+            integer_record("BITPIX", 8),
+            integer_record("NAXIS", 0),
+            [b' '; 80],                        // blank keyword before INSTRUME
+            text_record("INSTRUME", "TEST"),   // keyword that must survive blank
+            [b' '; 80],                        // blank keyword before END
+            end_record(),
+        ];
+
+        let mut bytes: Vec<u8> = records.into_iter().flatten().collect();
+        // Pad to the next 2880-byte boundary.
+        let rem = bytes.len() % 2880;
+        if rem != 0 {
+            bytes.extend(std::iter::repeat(b' ').take(2880 - rem));
+        }
+        bytes
+    }
+
+    #[test]
+    fn parser_reads_past_blank_keyword_records() {
+        let data = fits_bytes_with_blanks();
+        let path = std::env::temp_dir().join("rfitsio_blank_kw_test.fits");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(&data).unwrap();
+        }
+
+        let fits = parse(path.to_str().unwrap()).expect("parse failed");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(fits.hdus.len(), 1);
+
+        let headers = &fits.hdus[0].headers;
+        // SIMPLE, BITPIX, NAXIS, blank, INSTRUME, blank, END = 7 records
+        assert_eq!(headers.len(), 7, "wrong record count — parser may have stopped early");
+
+        let found_instrume = headers.iter().any(|h| h.key() == "INSTRUME");
+        assert!(
+            found_instrume,
+            "INSTRUME not found — parser stopped at blank keyword record"
+        );
+
+        assert_eq!(headers.last().unwrap().key(), "END");
+    }
+
+    #[test]
+    fn end_keyword_not_confused_with_keyword_starting_with_end() {
+        // Build a header where a real keyword starts with "END" (e.g. "ENDTIME")
+        // followed by the actual END record.  The parser must not terminate early.
+        let records: Vec<[u8; 80]> = vec![
+            logical_record("SIMPLE", true),
+            integer_record("BITPIX", 8),
+            integer_record("NAXIS", 0),
+            integer_record("ENDTIME", 42), // starts with "END" — must not stop here
+            end_record(),
+        ];
+
+        let mut bytes: Vec<u8> = records.into_iter().flatten().collect();
+        let rem = bytes.len() % 2880;
+        if rem != 0 {
+            bytes.extend(std::iter::repeat(b' ').take(2880 - rem));
+        }
+
+        let path = std::env::temp_dir().join("rfitsio_endtime_test.fits");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(&bytes).unwrap();
+        }
+
+        let fits = parse(path.to_str().unwrap()).expect("parse failed");
+        std::fs::remove_file(&path).ok();
+
+        let headers = &fits.hdus[0].headers;
+        // SIMPLE, BITPIX, NAXIS, ENDTIME, END = 5 records
+        assert_eq!(headers.len(), 5, "wrong record count — parser may have stopped at ENDTIME");
+
+        let found_endtime = headers.iter().any(|h| h.key() == "ENDTIME");
+        assert!(found_endtime, "ENDTIME not found — parser stopped at keyword starting with END");
+    }
 }
