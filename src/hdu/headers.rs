@@ -47,7 +47,7 @@ pub struct FITSHeader {
 }
 
 impl FITSHeader {
-    fn key(&self) -> &str {
+    pub fn key(&self) -> &str {
         std::str::from_utf8(&self.key[..8])
             .unwrap_or("<non-utf8>")
             .trim_end()
