@@ -46,6 +46,14 @@ pub struct FITSHeader {
     pub value: FITSVal,
 }
 
+impl FITSHeader {
+    fn key(&self) -> &str {
+        std::str::from_utf8(&self.key[..8])
+            .unwrap_or("<non-utf8>")
+            .trim_end()
+    }
+}
+
 impl std::fmt::Debug for FITSHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let key = std::str::from_utf8(&self.key[..8])
@@ -57,10 +65,7 @@ impl std::fmt::Debug for FITSHeader {
 
 impl std::fmt::Display for FITSHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let key = std::str::from_utf8(&self.key[..8])
-            .unwrap_or("NON-UTF8 HEADER KEY")
-            .trim_end();
-        write!(f, "KEY: {}", key)
+        write!(f, "KEY: {}", self.key())
     }
 }
 
